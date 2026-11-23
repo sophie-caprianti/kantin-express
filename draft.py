@@ -1,114 +1,160 @@
 MENU = {
-    1: ("Indomie", 8000),
-    2: ("Chicken Katsu", 17000),
-    3: ("Nasi Bakar", 10000),
-    4: ("Es Teh Jumbo ", 5000),
+    1: ("Nasi Goreng", 15000),
+    2: ("Mie Ayam", 13000),
+    3: ("Es Teh", 4000),
+    4: ("Gorengan", 2000),
 }
 
 daftar_pesanan = []  # semua pesanan yang sudah dibuat
 
 
-def harga_dalam_rupiah(angka):
+def rp(angka):
     return f"Rp{angka:,}".replace(",", ".")
 
 
 def tampilkan_menu():
     print("\n=== MENU ===")
-    for nama, harga in MENU.items():
-        print(f"{nama} - {harga_dalam_rupiah(harga)}")
+    for id_menu, (nama, harga) in MENU.items():
+        print(f"{id_menu}. {nama} - {rp(harga)}")
 
 
-def tambah_ke_keranjang(keranjang):
-    tampilkan_menu()
-    pilihan = input("Nomor menu: ")
-    if not pilihan.isdigit() or int(pilihan) not in MENU:
-        print("Nomor menu tidak ditemukan.")
-        return
-    jumlah = input("Jumlah porsi: ")
-    if not jumlah.isdigit() or int(jumlah) < 1:
-        print("Jumlah harus dalam angka minimal 1.")
-        return
-    id_menu = int(pilihan)
-    keranjang[id_menu] = keranjang.get(id_menu, 0) + int(jumlah)
-    print(f"Ditambahkan: {MENU[id_menu][0]} x{jumlah}")
-
-
-def hitung_total(keranjang):
+def hitung_total(list_pesanan_sementara):
     total = 0
-    for id_menu, jumlah in keranjang.items():
+    for id_menu, jumlah in list_pesanan_sementara.items():
         total += MENU[id_menu][1] * jumlah
     return total
 
 
-def tampilkan_keranjang(keranjang):
-    if not keranjang:
-        print("\nKeranjang masih kosong.")
-        return
-    print("\n=== KERANJANG ===")
-    for id_menu, jumlah in keranjang.items():
+def tampilkan_list_pesanan_sementara(list_pesanan_sementara):
+    for id_menu, jumlah in list_pesanan_sementara.items():
         nama, harga = MENU[id_menu]
-        print(f"{nama} x{jumlah} = {harga_dalam_rupiah(harga * jumlah)}")
-    print(f"Total: {harga_dalam_rupiah(hitung_total(keranjang))}")
+        print(f"{nama} x{jumlah} = {rp(harga * jumlah)}")
+    print(f"Total: {rp(hitung_total(list_pesanan_sementara))}")
 
 
-def buat_pesanan(keranjang):
-    if not keranjang:
-        print("Keranjang kosong, pilih menu dulu.")
+def tunggu_kembali():
+    while input("\nKetik 0 untuk kembali: ") != "0":
+        print("Ketik angka 0 untuk kembali.")
+
+
+def cari_pesanan(nomor):
+    for pesanan in daftar_pesanan:
+        if pesanan["nomor"] == nomor:
+            return pesanan
+    return None
+
+
+# ---------- Pilihan 1 ----------
+def lihat_daftar_makanan_dan_pesan(list_pesanan_sementara):
+    while True:
+        tampilkan_menu()
+        pilihan = input("\nMasukkan nomor menu yang ingin dipesan (0 = kembali ke menu sebelumnya): ")
+        if pilihan == "0":
+            return
+        if not pilihan.isdigit() or int(pilihan) not in MENU:
+            print("Nomor menu tidak ditemukan.")
+            continue
+
+        id_menu = int(pilihan)
+        nama = MENU[id_menu][0]
+        jumlah = input(f"Jumlah {nama} (0 = batal): ")
+        if not jumlah.isdigit():
+            print("Jumlah harus berupa angka.")
+            continue
+        jumlah = int(jumlah)
+        if jumlah == 0:
+            print("Dibatalkan.")
+            continue
+
+        list_pesanan_sementara[id_menu] = list_pesanan_sementara.get(id_menu, 0) + jumlah
+        print(f"Ditambahkan: {nama} x{jumlah}")
+
+
+# ---------- Pilihan 2 ----------
+def lihat_list_pesanan_sementara(list_pesanan_sementara):
+    print("\n=== LIST PESANAN SEMENTARA ===")
+    if not list_pesanan_sementara:
+        print("Belum ada menu yang dipilih.")
+    else:
+        tampilkan_list_pesanan_sementara(list_pesanan_sementara)
+    tunggu_kembali()
+
+
+# ---------- Pilihan 3 ----------
+def lakukan_pemesanan(list_pesanan_sementara):
+    if not list_pesanan_sementara:
+        print("\nList pesanan masih kosong. Pilih menu di pilihan 1.")
+        tunggu_kembali()
         return
-    nama = input("Nama pemesan: ").strip()
-    if nama == "":
+
+    print("\n=== KONFIRMASI PESANAN ===")
+    tampilkan_list_pesanan_sementara(list_pesanan_sementara)
+
+    while True:
+        nama = input("\nNama pemesan (0 = kembali ke menu sebelumnya): ").strip()
+        if nama == "0":
+            return
+        if nama != "":
+            break
         print("Nama tidak boleh kosong.")
-        return
 
     pesanan = {
         "nomor": len(daftar_pesanan) + 1,
         "nama": nama,
-        "isi": dict(keranjang),  # salinan, bukan keranjang aslinya
-        "total": hitung_total(keranjang),
+        "isi": dict(list_pesanan_sementara),  # salinan, bukan daftar pesanan aslinya
+        "total": hitung_total(list_pesanan_sementara),
         "status": "menunggu",
     }
     daftar_pesanan.append(pesanan)
-    keranjang.clear()
+    list_pesanan_sementara.clear()
 
     print("\nPesanan berhasil dibuat!")
     print(f"Nomor antrean kamu: {pesanan['nomor']}")
-    print(f"Total: {harga_dalam_rupiah(pesanan['total'])} (silahkan bayar di kantin)")
+    print(f"Total: {rp(pesanan['total'])} (bayar langsung di kantin)")
+    tunggu_kembali()
 
 
-def cek_status():
-    nomor = input("Nomor antrean kamu: ")
-    if not nomor.isdigit():
-        print("Masukkan angka.")
-        return
-    for pesanan in daftar_pesanan:
-        if pesanan["nomor"] == int(nomor):
-            print(f"Antrean {pesanan['nomor']} a/n {pesanan['nama']}: {pesanan['status']}")
+# ---------- Pilihan 4 ----------
+def lihat_status_antrean():
+    while True:
+        nomor = input("\nNomor antrean kamu (0 = kembali ke menu sebelumnya): ")
+        if nomor == "0":
             return
-    print("Nomor antrean tidak ditemukan.")
+        if not nomor.isdigit():
+            print("Masukkan angka.")
+            continue
+
+        pesanan = cari_pesanan(int(nomor))
+        if pesanan is None:
+            print("Nomor antrean tidak ditemukan.")
+        else:
+            print(f"Antrean {pesanan['nomor']} a.n. {pesanan['nama']}: {pesanan['status']}")
 
 
-keranjang = {}
-while True:
-    print("\n=== KANTIN DIGITAL ===")
-    print("1. Lihat menu")
-    print("2. Tambah ke keranjang")
-    print("3. Lihat keranjang")
-    print("4. Pesan sekarang")
-    print("5. Cek status pesanan")
-    print("0. Keluar")
-    pilihan = input("Pilih: ")
-    if pilihan == "1":
-        tampilkan_menu()
-    elif pilihan == "2":
-        tambah_ke_keranjang(keranjang)
-    elif pilihan == "3":
-        tampilkan_keranjang(keranjang)
-    elif pilihan == "4":
-        buat_pesanan(keranjang)
-    elif pilihan == "5":
-        cek_status()
-    elif pilihan == "0":
-        print("Terima kasih!")
-        break
-    else:
-        print("Pilihan tidak dikenal.")
+def main():
+    list_pesanan_sementara = {}
+    while True:
+        print("\n=== KANTIN ===")
+        print("1 = Lihat daftar makanan dan pesan")
+        print("2 = Lihat list pesanan sementara")
+        print("3 = Lakukan pemesanan")
+        print("4 = Lihat status antrean")
+        print("0 = Selesai")
+        pilihan = input("Pilih : ")
+
+        if pilihan == "1":
+            lihat_daftar_makanan_dan_pesan(list_pesanan_sementara)
+        elif pilihan == "2":
+            lihat_list_pesanan_sementara(list_pesanan_sementara)
+        elif pilihan == "3":
+            lakukan_pemesanan(list_pesanan_sementara)
+        elif pilihan == "4":
+            lihat_status_antrean()
+        elif pilihan == "0":
+            print("Terima kasih!")
+            break
+        else:
+            print("Pilihan tidak dikenal.")
+
+
+main()
