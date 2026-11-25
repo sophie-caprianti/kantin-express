@@ -42,8 +42,9 @@ def siapkan_database():
     if jumlah == 0:  # isi daftar makanan hanya saat database masih kosong
         db.executemany(
             "INSERT INTO makanan (nama, harga) VALUES (?, ?)",
-            [("Nasi Goreng", 15000), ("Mie Ayam", 13000),
-             ("Es Teh", 4000), ("Gorengan", 2000)],
+            [("Indomie Goreng", 8000), ("Indomie Kuah", 8000),
+             ("Indomie Jumbo", 13000), ("Sayur", 0),
+             ("Ekstra Telur", 4000), ("Ekstra Kornet", 2000),],
         )
     db.commit()
 
