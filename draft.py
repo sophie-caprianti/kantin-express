@@ -3,7 +3,7 @@ import sqlite3
 from datetime import datetime
 
 # file database disimpan di folder yang sama dengan program ini
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kantin_express.db")
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "warmindo_express.db")
 
 # status hanya boleh maju satu langkah: menunggu -> diproses -> selesai
 URUTAN_STATUS = {"menunggu": "diproses", "diproses": "selesai"}
@@ -74,7 +74,7 @@ def harga_dalam_rupiah(angka):
     return f"Rp{angka:,}".replace(",", ".")
 
 
-def tampilkan_daftar_makanan(makanan):
+def buat_pesanan_baru(makanan):
     print("\n=== DAFTAR MAKANAN ===")
     for id_makanan, (nama, harga) in makanan.items():
         print(f"{id_makanan}. {nama} - {harga_dalam_rupiah(harga)}")
@@ -100,12 +100,34 @@ def tunggu_kembali():
     while input("\nKetik 0 untuk kembali: ") != "0":
         print("Ketik angka 0 untuk kembali.")
 
+# ---------- Fungsi bantu untuk penjual ----------
+def catat_ke_file_harian(nomor, nama, daftar_sementara, total):
+    makanan = ambil_makanan()
+    sekarang = datetime.now()
+    nama_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        f"list_pesanan_{sekarang:%Y-%m-%d}.txt")
+    file_baru = not os.path.exists(nama_file)
+
+    with open(nama_file, "a") as f:
+        if file_baru:  # judul hanya ditulis sekali, saat file baru dibuat
+            f.write(f"LIST PESANAN TANGGAL {sekarang:%Y-%m-%d}\n")
+            f.write("=" * 40 + "\n")
+        f.write(f"Tanggal : {sekarang:%Y-%m-%d}\n")
+        f.write(f"Antrean : {nomor}\n")
+        f.write(f"Nama    : {nama}\n")
+        f.write("Pesanan :\n")
+        for id_makanan, jumlah in daftar_sementara.items():
+            f.write(f"  - {makanan[id_makanan][0]} x{jumlah}\n")
+        f.write(f"Total   : {harga_dalam_rupiah(total)}\n")
+        f.write("-" * 40 + "\n")
+
 
 # ---------- Fitur pembeli ----------
-def lihat_daftar_makanan_dan_pesan(daftar_sementara):
+def buat_pesanan_baru(daftar_sementara):
     makanan = ambil_makanan()
     while True:
-        tampilkan_daftar_makanan(makanan)
+        buat_pesanan_baru(makanan)
         pilihan = input("\nMasukkan nomor makanan yang ingin dipesan (0 = kembali): ")
         if pilihan == "0":
             return
@@ -115,13 +137,17 @@ def lihat_daftar_makanan_dan_pesan(daftar_sementara):
 
         id_makanan = int(pilihan)
         nama = makanan[id_makanan][0]
-        jumlah = input(f"Jumlah {nama} (0 = batal): ")
-        if not jumlah.isdigit():
+        try:
+            jumlah = int(input(f"Jumlah {nama} (0 = batal): "))
+        except ValueError:
             print("Jumlah harus berupa angka.")
             continue
-        jumlah = int(jumlah)
+
         if jumlah == 0:
             print("Dibatalkan.")
+            continue
+        if jumlah < 0:
+            print("Jumlah harus lebih dari nol.")
             continue
 
         daftar_sementara[id_makanan] = daftar_sementara.get(id_makanan, 0) + jumlah
@@ -201,15 +227,15 @@ def lihat_status_antrean():
 def menu_pembeli(daftar_sementara):
     while True:
         print("\n=== MENU PEMBELI ===")
-        print("1 = Lihat daftar makanan dan pesan")
+        print("1 = Tambah pesanan baru")
         print("2 = Lihat list pesanan")
-        print("3 = Lakukan pemesanan")
+        print("3 = Konfirmasi pemesanan")
         print("4 = Lihat status antrean")
         print("0 = Kembali")
         pilihan = input("Pilih: ")
 
         if pilihan == "1":
-            lihat_daftar_makanan_dan_pesan(daftar_sementara)
+            buat_pesanan_baru(daftar_sementara)
         elif pilihan == "2":
             lihat_list_pesanan(daftar_sementara)
         elif pilihan == "3":
@@ -223,6 +249,17 @@ def menu_pembeli(daftar_sementara):
 
 
 # ---------- Fitur penjual ----------
+password_penjual = "warmindo.pacil"  # contoh password penjual
+def minta_password():
+    isi = input("Password penjual (0 = kembali): ")
+    if isi == "0":
+        return False
+    if isi == password_penjual:
+        return True
+    else: 
+        print("Password salah.")
+        return False
+
 def tampilkan_pesanan_masuk():
     print("\n=== PESANAN MASUK HARI INI ===")
     baris_pesanan = db.execute(
@@ -267,26 +304,6 @@ def ubah_status_pesanan():
         db.commit()
         print(f"Antrean {pesanan['nomor_antrean']}: {status_lama} -> {status_baru}")
 
-def catat_ke_file_harian(nomor, nama, daftar_sementara, total):
-    makanan = ambil_makanan()
-    sekarang = datetime.now()
-    nama_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        f"list_pesanan_{sekarang:%Y-%m-%d}.txt")
-    file_baru = not os.path.exists(nama_file)
-
-    with open(nama_file, "a") as f:
-        if file_baru:  # judul hanya ditulis sekali, saat file baru dibuat
-            f.write(f"LIST PESANAN TANGGAL {sekarang:%Y-%m-%d}\n")
-            f.write("=" * 40 + "\n")
-        f.write(f"Tanggal : {sekarang:%Y-%m-%d}\n")
-        f.write(f"Antrean : {nomor}\n")
-        f.write(f"Nama    : {nama}\n")
-        f.write("Pesanan :\n")
-        for id_makanan, jumlah in daftar_sementara.items():
-            f.write(f"  - {makanan[id_makanan][0]} x{jumlah}\n")
-        f.write(f"Total   : {harga_dalam_rupiah(total)}\n")
-        f.write("-" * 40 + "\n")
 
 def menu_penjual():
     while True:
@@ -307,10 +324,10 @@ def menu_penjual():
 
 
 # ---------- Program utama ----------
-def utama():
+def main():
     daftar_sementara = {}  # daftar_sementara belum disimpan ke database sampai pembeli memesan
     while True:
-        print("\n=== KANTIN ===")
+        print("\n=== WARMINDO EXPRESS ===")
         print("1 = Masuk sebagai pembeli")
         print("2 = Masuk sebagai penjual")
         print("0 = Selesai")
@@ -319,13 +336,15 @@ def utama():
         if pilihan == "1":
             menu_pembeli(daftar_sementara)
         elif pilihan == "2":
-            menu_penjual()
+            if minta_password():
+                menu_penjual()
         elif pilihan == "0":
-            print("Terima kasih telah menggunakan Kantin Express!")
+            print("Terima kasih telah menggunakan Warmindo Express!")
             break
         else:
             print("Pilihan tidak valid.")
 
+
 siapkan_database()
-utama()
+main()
 db.close()
