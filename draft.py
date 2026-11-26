@@ -1,98 +1,99 @@
-import os
-import sqlite3
+import os # untuk akses file dan folder
 from datetime import datetime
 
-# file database disimpan di folder yang sama dengan program ini
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "warmindo_express.db")
+# file data disimpan di folder yang sama dengan program ini
+FOLDER = os.path.dirname(os.path.abspath(__file__))
+
+DAFTAR_MAKANAN = {
+    1: ("Indomie Goreng", 8000), 
+    2: ("Indomie Kuah", 8000),
+    3: ("Indomie Jumbo", 13000),
+    4: ("Ekstra Telur", 4000),
+    5: ("Ekstra Kornet", 5000),
+    6: ("Ekstra Sayur", 0)
+}
 
 # status hanya boleh maju satu langkah: menunggu -> diproses -> selesai
 URUTAN_STATUS = {"menunggu": "diproses", "diproses": "selesai"}
 
-db = sqlite3.connect(DB_FILE)
-db.row_factory = sqlite3.Row  # hasil query bisa dibaca per nama kolom
-
-HARI_INI = "date(waktu_pesan) = date('now', 'localtime')"
+password_penjual = "warmindo.pacil"  # contoh password penjual
 
 
-# ---------- Database ----------
-def siapkan_database():
-    db.executescript("""
-    CREATE TABLE IF NOT EXISTS makanan (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nama TEXT NOT NULL,
-        harga INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS pesanan (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nama_pemesan TEXT NOT NULL,
-        nomor_antrean INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'menunggu',
-        total INTEGER NOT NULL,
-        waktu_pesan TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS detail_pesanan (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pesanan_id INTEGER NOT NULL REFERENCES pesanan(id),
-        makanan_id INTEGER NOT NULL REFERENCES makanan(id),
-        jumlah INTEGER NOT NULL,
-        harga_satuan INTEGER NOT NULL
-    );
-    """)
-    jumlah = db.execute("SELECT COUNT(*) FROM makanan").fetchone()[0]
-    if jumlah == 0:  # isi daftar makanan hanya saat database masih kosong
-        db.executemany(
-            "INSERT INTO makanan (nama, harga) VALUES (?, ?)",
-            [("Indomie Goreng", 8000), ("Indomie Kuah", 8000),
-             ("Indomie Jumbo", 13000), ("Sayur", 0),
-             ("Ekstra Telur", 4000), ("Ekstra Kornet", 2000),],
-        )
-    db.commit()
+# ---------- Penyimpanan ke file txt ----------
+# Satu file per hari: pesanan_yyyy-mm-dd.txt
+# Satu baris = satu pesanan, kolom dipisah tanda |
+# Format: nomor|nama|waktu|status|total|makanan:jumlah;makanan:jumlah
+def nama_file_hari_ini():
+    return os.path.join(FOLDER, f"pesanan_{datetime.now():%Y-%m-%d}.txt")
 
 
-def ambil_makanan():
-    makanan = {}
-    for baris in db.execute("SELECT id, nama, harga FROM makanan ORDER BY id"):
-        makanan[baris["id"]] = (baris["nama"], baris["harga"])
-    return makanan
+def baca_pesanan():
+    daftar = []
+    nama_file = nama_file_hari_ini()
+    if not os.path.exists(nama_file):  # jika belum ada pesanan hari ini
+        return daftar
+
+    with open(nama_file, "r") as f:
+        for baris in f:
+            baris = baris.strip()
+            if baris == "":
+                continue
+            nomor, nama, waktu, status, total, isi_teks = baris.split("|")
+            isi = {}
+            for potongan in isi_teks.split(";"):
+                nama_makanan, jumlah = potongan.split(":")
+                isi[nama_makanan] = int(jumlah)
+            daftar.append({
+                "nomor": int(nomor),
+                "nama": nama,
+                "waktu": waktu,
+                "status": status,
+                "total": int(total),
+                "isi": isi,
+            })
+    return daftar
 
 
-def cari_pesanan(nomor):
-    # nomor antrean mengulang tiap hari, jadi hanya cari pesanan hari ini
-    return db.execute(
-        f"SELECT * FROM pesanan WHERE nomor_antrean = ? AND {HARI_INI}",
-        (nomor,)).fetchone()
+def simpan_semua_pesanan(daftar):
+    # mode "w" menimpa isi file, jadi semua pesanan ditulis ulang
+    with open(nama_file_hari_ini(), "w") as f:
+        for p in daftar:
+            potongan = []
+            for nama_makanan, jumlah in p["isi"].items():
+                potongan.append(f"{nama_makanan}:{jumlah}")
+            isi_teks = ";".join(potongan)
+            f.write(f"{p['nomor']}|{p['nama']}|{p['waktu']}|"
+                    f"{p['status']}|{p['total']}|{isi_teks}\n")
 
 
-def ambil_detail(pesanan_id):
-    return db.execute(
-        """SELECT m.nama, d.jumlah
-           FROM detail_pesanan d JOIN makanan m ON m.id = d.makanan_id
-           WHERE d.pesanan_id = ?""", (pesanan_id,)).fetchall()
+def cari_pesanan(daftar, nomor):
+    for pesanan in daftar:
+        if pesanan["nomor"] == nomor:
+            return pesanan
+    return None
 
 
-# ---------- Fungsi bantu untuk pembeli ----------
+# ---------- Fungsi bantu ----------
 def harga_dalam_rupiah(angka):
     return f"Rp{angka:,}".replace(",", ".")
 
 
-def buat_pesanan_baru(makanan):
+def tampilkan_daftar_makanan():
     print("\n=== DAFTAR MAKANAN ===")
-    for id_makanan, (nama, harga) in makanan.items():
+    for id_makanan, (nama, harga) in DAFTAR_MAKANAN.items():
         print(f"{id_makanan}. {nama} - {harga_dalam_rupiah(harga)}")
 
 
 def hitung_total(daftar_sementara):
-    makanan = ambil_makanan()
     total = 0
     for id_makanan, jumlah in daftar_sementara.items():
-        total += makanan[id_makanan][1] * jumlah
+        total += DAFTAR_MAKANAN[id_makanan][1] * jumlah
     return total
 
 
 def tampilkan_daftar_sementara(daftar_sementara):
-    makanan = ambil_makanan()
     for id_makanan, jumlah in daftar_sementara.items():
-        nama, harga = makanan[id_makanan]
+        nama, harga = DAFTAR_MAKANAN[id_makanan]
         print(f"{nama} x{jumlah} = {harga_dalam_rupiah(harga * jumlah)}")
     print(f"Total: {harga_dalam_rupiah(hitung_total(daftar_sementara))}")
 
@@ -101,43 +102,20 @@ def tunggu_kembali():
     while input("\nKetik 0 untuk kembali: ") != "0":
         print("Ketik angka 0 untuk kembali.")
 
-# ---------- Fungsi bantu untuk penjual ----------
-def catat_ke_file_harian(nomor, nama, daftar_sementara, total):
-    makanan = ambil_makanan()
-    sekarang = datetime.now()
-    nama_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        f"list_pesanan_{sekarang:%Y-%m-%d}.txt")
-    file_baru = not os.path.exists(nama_file)
-
-    with open(nama_file, "a") as f:
-        if file_baru:  # judul hanya ditulis sekali, saat file baru dibuat
-            f.write(f"LIST PESANAN TANGGAL {sekarang:%Y-%m-%d}\n")
-            f.write("=" * 40 + "\n")
-        f.write(f"Tanggal : {sekarang:%Y-%m-%d}\n")
-        f.write(f"Antrean : {nomor}\n")
-        f.write(f"Nama    : {nama}\n")
-        f.write("Pesanan :\n")
-        for id_makanan, jumlah in daftar_sementara.items():
-            f.write(f"  - {makanan[id_makanan][0]} x{jumlah}\n")
-        f.write(f"Total   : {harga_dalam_rupiah(total)}\n")
-        f.write("-" * 40 + "\n")
-
 
 # ---------- Fitur pembeli ----------
 def buat_pesanan_baru(daftar_sementara):
-    makanan = ambil_makanan()
     while True:
-        buat_pesanan_baru(makanan)
+        tampilkan_daftar_makanan()
         pilihan = input("\nMasukkan nomor makanan yang ingin dipesan (0 = kembali): ")
         if pilihan == "0":
             return
-        if not pilihan.isdigit() or int(pilihan) not in makanan:
+        if not pilihan.isdigit() or int(pilihan) not in DAFTAR_MAKANAN:
             print("Nomor makanan tidak ada.")
             continue
 
         id_makanan = int(pilihan)
-        nama = makanan[id_makanan][0]
+        nama = DAFTAR_MAKANAN[id_makanan][0]
         try:
             jumlah = int(input(f"Jumlah {nama} (0 = batal): "))
         except ValueError:
@@ -180,26 +158,25 @@ def lakukan_pemesanan(daftar_sementara):
         if nama != "":
             break
         print("Nama pemesan tidak boleh kosong.")
+    nama = nama.replace("|", "-")  # tanda | dipakai sebagai pemisah kolom di file
 
-    makanan = ambil_makanan()
-    nomor = db.execute(
-        f"SELECT COALESCE(MAX(nomor_antrean), 0) + 1 FROM pesanan WHERE {HARI_INI}"
-    ).fetchone()[0]
+    daftar = baca_pesanan()
+    nomor = len(daftar) + 1  # file baru tiap hari, jadi nomor mulai dari 1 lagi
+
+    isi = {}
+    for id_makanan, jumlah in daftar_sementara.items():
+        isi[DAFTAR_MAKANAN[id_makanan][0]] = jumlah
     total = hitung_total(daftar_sementara)
 
-    cur = db.execute(
-        "INSERT INTO pesanan (nama_pemesan, nomor_antrean, total, waktu_pesan) "
-        "VALUES (?, ?, ?, datetime('now', 'localtime'))",
-        (nama, nomor, total))
-    pesanan_id = cur.lastrowid  # id pesanan yang baru saja dibuat
-
-    for id_makanan, jumlah in daftar_sementara.items():
-        db.execute(
-            "INSERT INTO detail_pesanan (pesanan_id, makanan_id, jumlah, harga_satuan) "
-            "VALUES (?, ?, ?, ?)",
-            (pesanan_id, id_makanan, jumlah, makanan[id_makanan][1]))
-    db.commit()  # tanpa commit, perubahan tidak tersimpan permanen
-    catat_ke_file_harian(nomor, nama, daftar_sementara, total)
+    daftar.append({
+        "nomor": nomor,
+        "nama": nama,
+        "waktu": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "menunggu",
+        "total": total,
+        "isi": isi,
+    })
+    simpan_semua_pesanan(daftar)
     daftar_sementara.clear()
 
     print("\nPesanan berhasil dibuat!")
@@ -217,12 +194,15 @@ def lihat_status_antrean():
             print("Nomor antrean harus berupa angka.")
             continue
 
-        pesanan = cari_pesanan(int(nomor))
+        pesanan = cari_pesanan(baca_pesanan(), int(nomor))
         if pesanan is None:
             print("Nomor antrean tidak ditemukan.")
         else:
-            print(f"Antrean {pesanan['nomor_antrean']} a.n. "
-                  f"{pesanan['nama_pemesan']}: {pesanan['status']}")
+            if pesanan['status'] == "selesai":
+                print(f"Antrean {pesanan['nomor']} a.n. {pesanan['nama']}: {pesanan['status']}.")
+                print("Segera ambil pesanan dan lakukan pembayaran di kantin")
+            else:
+                print(f"Antrean {pesanan['nomor']} a.n. {pesanan['nama']}: {pesanan['status']}")
 
 
 def menu_pembeli(daftar_sementara):
@@ -250,29 +230,28 @@ def menu_pembeli(daftar_sementara):
 
 
 # ---------- Fitur penjual ----------
-password_penjual = "warmindo.pacil"  # contoh password penjual
 def minta_password():
     isi = input("Password penjual (0 = kembali): ")
     if isi == "0":
         return False
     if isi == password_penjual:
         return True
-    else: 
-        print("Password salah.")
-        return False
+    print("Password salah.")
+    return False
+
 
 def tampilkan_pesanan_masuk():
     print("\n=== PESANAN MASUK HARI INI ===")
-    baris_pesanan = db.execute(
-        f"SELECT * FROM pesanan WHERE status != 'selesai' AND {HARI_INI} "
-        "ORDER BY nomor_antrean").fetchall()
-    if not baris_pesanan:
+    ada = False
+    for p in baca_pesanan():
+        if p["status"] != "selesai":
+            ada = True
+            print(f"\nAntrean {p['nomor']} - {p['nama']} [{p['status']}]")
+            for nama_makanan, jumlah in p["isi"].items():
+                print(f"  {nama_makanan} x{jumlah}")
+            print(f"  Total: {harga_dalam_rupiah(p['total'])}")
+    if not ada:
         print("Tidak ada pesanan yang sedang aktif.")
-    for p in baris_pesanan:
-        print(f"\nAntrean {p['nomor_antrean']} - {p['nama_pemesan']} [{p['status']}]")
-        for d in ambil_detail(p["id"]):
-            print(f"  {d['nama']} x{d['jumlah']}")
-        print(f"  Total: {harga_dalam_rupiah(p['total'])}")
 
 
 def lihat_pesanan_masuk():
@@ -283,14 +262,15 @@ def lihat_pesanan_masuk():
 def ubah_status_pesanan():
     while True:
         tampilkan_pesanan_masuk()
-        nomor = input("\nNomor antrean yang diubah statusnya (0 = kembali): ")
+        nomor = input("\nNomor antrean yang ingin diubah statusnya (0 = kembali): ")
         if nomor == "0":
             return
         if not nomor.isdigit():
             print("Nomor antrean harus berupa angka.")
             continue
 
-        pesanan = cari_pesanan(int(nomor))
+        daftar = baca_pesanan()
+        pesanan = cari_pesanan(daftar, int(nomor))
         if pesanan is None:
             print("Nomor antrean tidak ditemukan.")
             continue
@@ -299,11 +279,9 @@ def ubah_status_pesanan():
             continue
 
         status_lama = pesanan["status"]
-        status_baru = URUTAN_STATUS[status_lama]
-        db.execute("UPDATE pesanan SET status = ? WHERE id = ?",
-                   (status_baru, pesanan["id"]))
-        db.commit()
-        print(f"Antrean {pesanan['nomor_antrean']}: {status_lama} -> {status_baru}")
+        pesanan["status"] = URUTAN_STATUS[status_lama]  # mengubah isi daftar juga
+        simpan_semua_pesanan(daftar)
+        print(f"Antrean {pesanan['nomor']}: {status_lama} -> {pesanan['status']}")
 
 
 def menu_penjual():
@@ -326,7 +304,7 @@ def menu_penjual():
 
 # ---------- Program utama ----------
 def main():
-    daftar_sementara = {}  # daftar_sementara belum disimpan ke database sampai pembeli memesan
+    daftar_sementara = {}  # belum disimpan ke file sampai pembeli konfirmasi pemesanan
     while True:
         print("\n=== WARMINDO EXPRESS ===")
         print("1 = Masuk sebagai pembeli")
@@ -346,6 +324,4 @@ def main():
             print("Pilihan tidak valid.")
 
 
-siapkan_database()
 main()
-db.close()
